@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from mmengine.model import BaseModule
+from mmengine.model import BaseModule, ModuleList
 from mmdet.registry import MODELS
 from mmdet.utils import ConfigType, OptMultiConfig
 from ..layers import DeformLayer
@@ -53,8 +53,10 @@ class YOSONeck(BaseModule):
         self.lateral_conv = nn.ModuleList([
             nn.Conv2d(in_channels=ch, out_channels=ch//2, kernel_size=1, stride=1, padding=0) 
             for ch in in_channels[::-1]])
-        # Deform conv: adaptive receptive field
-        self.deform_conv = nn.ModuleList([
+
+        # Deform conv: adaptive receptive field# use ModuleList from mmengine so BaseModule weight initialization loads correctly
+        # Use ModuleList from mmengine so BaseModule weight initialization correctly traverses this layer
+        self.deform_conv = ModuleList([
             DeformLayer(in_channels=in_channels[i]//2, out_channels=in_channels[i-1]//2, 
                         norm_cfg=norm_cfg, **deform_layer) 
             for i in range(len(in_channels)-1, 0,-1)]) #Pn: Pn+1 + Cn

@@ -9,7 +9,7 @@ from mmengine.structures import InstanceData, PixelData
 from mmdet.registry import MODELS, TASK_UTILS
 
 from mmcv.ops import point_sample
-from mmengine.model import BaseModule
+from mmengine.model import BaseModule, ModuleList
 from mmdet.structures import SampleList
 from mmdet.utils import ConfigType, InstanceList, OptConfigType, OptMultiConfig, reduce_mean
 
@@ -88,7 +88,8 @@ class YOSOHead(BaseDenseHead):
 
         self.kernels = nn.Conv2d(in_channels=self.in_channels, out_channels=self.num_proposals, kernel_size=1)
 
-        self.mask_heads = nn.ModuleList()
+        # Use ModuleList from mmengine so BaseModule weight initialization correctly traverses this layer
+        self.mask_heads = ModuleList()
         for _ in range(self.num_stages):
             self.mask_heads.append(YOSODecoderLayer(**decoder_layer_cfg))
         
