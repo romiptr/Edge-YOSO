@@ -1,3 +1,4 @@
+from .backbone import *
 from .neck import YOSONeck
 from .head import YOSOHead
 from .fusion_head import YOSOFusionHead
