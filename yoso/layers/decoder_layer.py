@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from mmcv.cnn import build_norm_layer
 from mmcv.cnn.bricks.transformer import FFN, MultiheadAttention
-from mmengine.model import BaseModule
+from mmengine.model import BaseModule, bias_init_with_prob
 from mmdet.utils import ConfigType, OptMultiConfig
 
 
@@ -93,6 +93,13 @@ class YOSODecoderLayer(BaseModule):
             mask_layers.append(nn.ReLU(True))
         self.mask_fcs = nn.Sequential(*mask_layers)
         self.fc_mask = nn.Linear(self.in_channels, self.in_channels)
+
+    def init_weights(self) -> None:
+        """Initialize weights."""
+        super().init_weights()
+
+        bias_value = bias_init_with_prob(0.01) 
+        nn.init.constant_(self.fc_cls.bias, bias_value)
 
     def forward(self, feat: Tensor, 
                 proposal_kernels: Tensor, 
