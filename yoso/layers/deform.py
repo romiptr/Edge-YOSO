@@ -7,8 +7,8 @@ from mmcv.ops import DeformConv2d, ModulatedDeformConv2d
 from mmengine.model import BaseModule
 from mmdet.utils import ConfigType, OptMultiConfig
 
-import math
-
+from .dysample import DySample
+# import math
 
 class DeformLayer(BaseModule):
     """ DeformLayer acts as the top-down bridge for the YOSO FPN (Feature Pyramid Aggregator).  
@@ -25,6 +25,8 @@ class DeformLayer(BaseModule):
             Defaults to 1.
         deform_num_groups (int): Number of groups used in deformable convolution.
             Defaults to 1.
+        dysample_cfg (:obj:`ConfigDict` or dict): Config for DySample upsampling. 
+            Defaults to None.
         norm_cfg (:obj:`ConfigDict` or dict): Config for normalization.
             Defaults to None.
         init_cfg (:obj:`ConfigDict` or dict or list[:obj:`ConfigDict` or \
@@ -39,6 +41,7 @@ class DeformLayer(BaseModule):
                  num_groups: int = 1,
                  dilation: int = 1,
                  deform_num_groups: int = 1, 
+                 dysample_cfg: ConfigType = None,
                  norm_cfg: ConfigType = None,
                  init_cfg: OptMultiConfig = [
                      dict(type='Kaiming', layer=['ModulatedDeformConv2d', 'DeformConv2d']),
@@ -75,15 +78,18 @@ class DeformLayer(BaseModule):
         self.dcn_bn = build_norm_layer(norm_cfg, out_channels)[1]
         self.relu = nn.ReLU()
         
-        # Deconvolution
-        self.upsample = nn.ConvTranspose2d(in_channels=out_channels,
-                                            out_channels=out_channels,
-                                            kernel_size=4,
-                                            stride=2, padding=1,
-                                            output_padding=0,
-                                            bias=False)
+        # Upsampling (DySample)
+        self.upsample = DySample(in_channels=out_channels, **dysample_cfg)
 
-        self.upsample_bn = build_norm_layer(norm_cfg, out_channels)[1]
+        # Upsampling (Deconv)
+        # self.upsample = nn.ConvTranspose2d(in_channels=out_channels,
+        #                                     out_channels=out_channels,
+        #                                     kernel_size=4,
+        #                                     stride=2, padding=1,
+        #                                     output_padding=0,
+        #                                     bias=False)
+
+        # self.upsample_bn = build_norm_layer(norm_cfg, out_channels)[1]
 
     def forward(self, x: Tensor) -> Tensor:
         """Forward function.
@@ -110,17 +116,17 @@ class DeformLayer(BaseModule):
         out = self.relu(out)
         out = self.upsample(out)
 
-        out = self.upsample_bn(out)
-        out = self.relu(out)
+        # out = self.upsample_bn(out)
+        # out = self.relu(out)
 
         return out
 
-    def init_weights(self) -> None:
-        """Initialize weights."""
-        super().init_weights()
-        self._deconv_init()
+    # def init_weights(self) -> None:
+    #     """Initialize weights."""
+    #     super().init_weights()
+    #     self._deconv_init()
 
-    def _deconv_init(self) -> None:
+    def _deconv_init(self):
         """Weight initialization for Deconvolution."""
         w = self.upsample.weight.data
         f = math.ceil(w.size(2) / 2)
