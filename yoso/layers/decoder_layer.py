@@ -242,24 +242,41 @@ class DySepConvAtten(BaseModule):
         
         dy_conv_weight = self.weight_linear(query)
         
-        # Split projected weights into Depthwise and Pointwise kernels
-        dy_depth_conv_weight = dy_conv_weight[:, :, :self.kernel_size].view(B,self.num_proposals,1,self.kernel_size)
-        dy_point_conv_weight = dy_conv_weight[:, :, self.kernel_size:].view(B,self.num_proposals,self.num_proposals,1)
+        if not torch.onnx.is_in_onnx_export():
+            # Split projected weights into Depthwise and Pointwise kernels
+            dy_depth_conv_weight = dy_conv_weight[:, :, :self.kernel_size].view(B,self.num_proposals,1,self.kernel_size)
+            dy_point_conv_weight = dy_conv_weight[:, :, self.kernel_size:].view(B,self.num_proposals,self.num_proposals,1)
 
-        res = []
-        value = value.unsqueeze(1)
-        for i in range(B):
-            # input: [1, N, C]
-            # weight: [N, 1, K]
-            # output: [1, N, C]
-            out = F.relu(F.conv1d(input=value[i], weight=dy_depth_conv_weight[i], groups=N, padding="same"))
-            # input: [1, N, C]
-            # weight: [N, N, 1]
-            # output: [1, N, C]
-            out = F.conv1d(input=out, weight=dy_point_conv_weight[i], padding='same')
+            res = []
+            value = value.unsqueeze(1)
+            for i in range(B):
+                # input: [1, N, C]
+                # weight: [N, 1, K]
+                # output: [1, N, C]
+                out = F.relu(F.conv1d(input=value[i], weight=dy_depth_conv_weight[i], groups=N, padding="same"))
+                # input: [1, N, C]
+                # weight: [N, N, 1]
+                # output: [1, N, C]
+                out = F.conv1d(input=out, weight=dy_point_conv_weight[i], padding='same')
 
-            res.append(out)
-        out = torch.cat(res, dim=0)
+                res.append(out)
+            out = torch.cat(res, dim=0)
+        else:
+            # Split projected weights into Depthwise and Pointwise kernels
+            dy_depth_conv_weight = dy_conv_weight[:, :, :self.kernel_size]
+            dy_point_conv_weight = dy_conv_weight[:, :, self.kernel_size:]
+
+            # Depthwise
+            value_pad = F.pad(input=value, pad=(self.padding, self.padding)) # [B,N,C+2]
+            slices = []
+            for i in range(self.kernel_size):
+                out = value_pad[:, :, i:i+C] * dy_depth_conv_weight[:, :, i:i+1]
+                slices.append(out)
+
+            out = F.relu(torch.stack(slices, dim=-1).sum(dim=-1))
+
+            # Pointwise
+            out = torch.bmm(dy_point_conv_weight, out)
+
         out = self.norm(out)
-
         return out
