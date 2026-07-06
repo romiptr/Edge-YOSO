@@ -144,8 +144,11 @@ class YOSODecoderLayer(BaseModule):
         hard_sigmoid_masks = hard_sigmoid_masks / pixel_norm
 
         # Masked Feature (V) = r(A)r(S).T
-        # [B, N, H, W] @ [B, C, H, W] -> [B, N, C]
-        V = torch.einsum('bnhw,bchw->bnc', hard_sigmoid_masks, feat)
+        # [B, N, H*W] @ [B, H*W, C] -> [B, N, C]
+        # for tensorrt dynamic size export use bmm
+        V = torch.bmm(hard_sigmoid_masks.view(B, self.num_proposals, H * W), 
+                        feat.view(B, C, H*W).transpose(1,2))
+        # V = torch.einsum('bnhw,bchw->bnc', hard_sigmoid_masks, feat)
 
         # Learnable Proposal Kernel (Q)
         # [B, N, C, K, K] -> [B, N, C * K * K] with K=1 -> [B,N,C]
