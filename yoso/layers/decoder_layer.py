@@ -138,6 +138,11 @@ class YOSODecoderLayer(BaseModule):
         nonzero_inds = soft_sigmoid_masks > self.hard_mask_thr
         hard_sigmoid_masks = nonzero_inds.float()
 
+        # mask normalization with pixel count
+        pixel_norm = sigmoid_masks.sum(dim=(2,3), keepdim=True)
+        pixel_norm = pixel_norm.clamp(min=1.0)
+        hard_sigmoid_masks = hard_sigmoid_masks / pixel_norm
+
         # Masked Feature (V) = r(A)r(S).T
         # [B, N, H, W] @ [B, C, H, W] -> [B, N, C]
         V = torch.einsum('bnhw,bchw->bnc', hard_sigmoid_masks, feat)
