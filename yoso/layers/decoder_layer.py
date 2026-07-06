@@ -57,7 +57,6 @@ class YOSODecoderLayer(BaseModule):
         self.in_channels = in_channels
         self.num_proposals = num_proposals
         self.num_c_attn_blocks = num_c_attn_blocks
-        self.hard_mask_thr = 0.5
 
         self.c_atten = nn.ModuleList()
         self.c_dropout = nn.ModuleList()
@@ -134,21 +133,17 @@ class YOSODecoderLayer(BaseModule):
         B, C, H, W = feat.shape
 
         # == Pre-Attention ==
-        soft_sigmoid_masks = mask_preds.sigmoid()
-        nonzero_inds = soft_sigmoid_masks > self.hard_mask_thr
-        hard_sigmoid_masks = nonzero_inds.float()
-
+        sigmoid_masks = (mask_preds.sigmoid() > 0.5).to(feat.dtype)
         # mask normalization with pixel count
-        pixel_norm = sigmoid_masks.sum(dim=(2,3), keepdim=True)
-        pixel_norm = pixel_norm.clamp(min=1.0)
-        hard_sigmoid_masks = hard_sigmoid_masks / pixel_norm
+        pixel_norm = sigmoid_masks.sum(dim=(2,3), keepdim=True).clamp(min=1.0)
+        normed_sigmoid_masks = sigmoid_masks / pixel_norm
 
         # Masked Feature (V) = r(A)r(S).T
         # [B, N, H*W] @ [B, H*W, C] -> [B, N, C]
         # for tensorrt dynamic size export use bmm
-        V = torch.bmm(hard_sigmoid_masks.view(B, self.num_proposals, H * W), 
+        V = torch.bmm(normed_sigmoid_masks.view(B, self.num_proposals, H * W), 
                         feat.view(B, C, H*W).transpose(1,2))
-        # V = torch.einsum('bnhw,bchw->bnc', hard_sigmoid_masks, feat)
+        # V = torch.einsum('bnhw,bchw->bnc', normed_sigmoid_masks, feat)
 
         # Learnable Proposal Kernel (Q)
         # [B, N, C, K, K] -> [B, N, C * K * K] with K=1 -> [B,N,C]
@@ -187,7 +182,7 @@ class YOSODecoderLayer(BaseModule):
         # [B, N, K * K, C] -> [B, N, C]
         mask_kernels = self.fc_mask(mask_feat).squeeze(2)
         new_mask_preds = torch.einsum("bqc,bchw->bqhw", mask_kernels, feat)
-        #torch.bmm(mask_kernels, feat.view(B, C, H * W)).view(B, self.num_proposals, H, W)
+        # new_mask_preds = torch.bmm(mask_kernels, feat.view(B, C, H * W)).view(B, self.num_proposals, H, W)
 
         #  [B, N, K * K, C] -> [B, N, C, K, K]
         new_panoptic_kernels = obj_feat.permute(0, 1, 3, 2).reshape(B, self.num_proposals, self.in_channels, 1, 1)
