@@ -1,3 +1,9 @@
 timm
 panopticapi @ git+https://github.com/cocodataset/panopticapi.git
 tensorboard
+numpy<2
+pillow==10.4.0
+opencv-python<4.10
+scipy
+Pycocotools
+psutil
